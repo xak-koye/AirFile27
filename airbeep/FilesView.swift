@@ -1,4 +1,4 @@
-import SwiftUI
+ import SwiftUI
 
 struct FileItem: Identifiable {
     let id = UUID()
@@ -21,6 +21,7 @@ struct FilesView: View {
             } else {
                 ForEach(items) { item in
                     if item.isDirectory {
+                        // ئەمە دەبێتە هۆی چوونە ناو فۆڵدەرەکە
                         NavigationLink(destination: FilesView(initialPath: currentPath + "/" + item.name)) {
                             Label(item.name, systemImage: "folder.fill")
                                 .foregroundColor(.blue)
@@ -35,6 +36,7 @@ struct FilesView: View {
                 }
             }
         }
+        // ناوی شاشەکە لێرە دیاری دەکرێت
         .navigationTitle(currentPath.components(separatedBy: "/").last ?? "Files")
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
@@ -59,7 +61,7 @@ struct FilesView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
             self.isLoading = false
             
-            // ئەمە تەنها بۆ تاقیکردنەوەیە بۆ ئەوەی ببینین فۆڵدەرەکان دەکرێنەوە
+            // داتای نموونەیی بۆ تاقیکردنەوە
             if path == "/var/mobile" {
                 self.items = [
                     FileItem(name: "Library", isDirectory: true),
@@ -76,7 +78,7 @@ struct FilesView: View {
                 ]
             } else {
                 self.items = [
-                    FileItem(name: "Inside_\(path.components(separatedBy: "/").last ?? "Folder").txt", isDirectory: false)
+                    FileItem(name: "file_inside.txt", isDirectory: false)
                 ]
             }
         }
