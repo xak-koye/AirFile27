@@ -75,7 +75,7 @@ struct FilesView: View {
                 ]
             } else {
                 self.items = [
-                    FileItem(name: "inside_folder.txt", isDirectory: false)
+                    FileItem(name: "file_inside.txt", isDirectory: false)
                 ]
             }
         }
