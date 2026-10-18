@@ -7,9 +7,8 @@ struct AirBeepRootView: View {
     @State private var showingAirliftSetup = false
 
     var body: some View {
-        // لێرەدا TabView زیادکرا
         TabView {
-            // تاب ١: شاشەی سەرەکی (کۆدی پێشوو)
+            // --- تاب ١: شاشەی سەرەکی ---
             NavigationStack {
                 ScrollView {
                     VStack(spacing: 24) {
@@ -37,57 +36,60 @@ struct AirBeepRootView: View {
                         .accessibilityLabel("About")
                     }
                 }
+                .onAppear {
+                    service.refresh()
+                }
+                .sheet(isPresented: $showingAbout) {
+                    AirBeepAboutView()
+                }
+                .sheet(isPresented: $showingAirliftSetup, onDismiss: {
+                    service.refresh()
+                }) {
+                    AirBeepAirliftSetupView()
+                }
+                .alert(
+                    "Operation Failed",
+                    isPresented: Binding(
+                        get: { service.lastError != nil },
+                        set: { presented in
+                            if !presented { service.clearError() }
+                        }
+                    )
+                ) {
+                    Button("OK") { service.clearError() }
+                } message: {
+                    Text(service.lastError ?? "")
+                }
+                .alert(
+                    "Done",
+                    isPresented: Binding(
+                        get: { service.successMessage != nil },
+                        set: { presented in
+                            if !presented { service.clearSuccess() }
+                        }
+                    )
+                ) {
+                    Button("OK") { service.clearSuccess() }
+                } message: {
+                    Text(service.successMessage ?? "")
+                }
             }
             .tabItem {
                 Label("Home", systemImage: "house.fill")
             }
-            .onAppear {
-                service.refresh()
-            }
-            .sheet(isPresented: $showingAbout) {
-                AirBeepAboutView()
-            }
-            .sheet(isPresented: $showingAirliftSetup, onDismiss: {
-                service.refresh()
-            }) {
-                AirBeepAirliftSetupView()
-            }
-            .alert(
-                "Operation Failed",
-                isPresented: Binding(
-                    get: { service.lastError != nil },
-                    set: { presented in
-                        if !presented { service.clearError() }
-                    }
-                )
-            ) {
-                Button("OK") { service.clearError() }
-            } message: {
-                Text(service.lastError ?? "")
-            }
-            .alert(
-                "Done",
-                isPresented: Binding(
-                    get: { service.successMessage != nil },
-                    set: { presented in
-                        if !presented { service.clearSuccess() }
-                    }
-                )
-            ) {
-                Button("OK") { service.clearSuccess() }
-            } message: {
-                Text(service.successMessage ?? "")
-            }
             
-            // ✅ تاب ٢: شاشەی فایلەکان کە زیادمان کرد
-            FilesView()
-                .tabItem {
-                    Label("Files", systemImage: "folder.fill")
-                }
+            // --- ✅ تاب ٢: شاشەی فایلەکان (چاککراو) ---
+            // NavigationStack لێرە زۆر گرنگە بۆ ئەوەی کلیک لەسەر فۆڵدەرەکان کار بکات
+            NavigationStack {
+                FilesView()
+            }
+            .tabItem {
+                Label("Files", systemImage: "folder.fill")
+            }
         }
     }
 
-    // --- بەشەکانی خوارەوە هەمان کۆدی پێشوون و دەستکاری نەکراون ---
+    // --- بەشەکانی خوارەوە (هەمان کۆدی پێشوون) ---
 
     private var header: some View {
         VStack(spacing: 12) {
