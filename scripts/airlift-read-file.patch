@@ -14,7 +14,7 @@ diff --git a/rust-core/include/airlift.h b/rust-core/include/airlift.h
 index 1ff754d..b7db802 100644
 --- a/rust-core/include/airlift.h
 +++ b/rust-core/include/airlift.h
-@@ -89,6 +89,19 @@ int32_t al_exploit_run(const char *pairing_path,
+@@ -89,6 +89,26 @@ int32_t al_exploit_run(const char *pairing_path,
                          char **out_json,
                          char **out_error);
  
@@ -30,6 +30,15 @@ index 1ff754d..b7db802 100644
 +
 +// Free bytes returned by al_exploit_read_file().
 +void al_bytes_free(uint8_t *ptr, size_t len);
++
++// List directory contents on the device via AFC.
++// `out_json` receives a JSON array string; release with al_string_free().
++int32_t al_exploit_list_dir(const char *pairing_path,
++                             const char *ios_path,
++                             ALLogCallback log_cb,
++                             void *ctx,
++                             char **out_json,
++                             char **out_error);
 +
  // Write all files from `source_dir` into `target_dir` on the device.
  // Returns 0 on success, 1 on error (with out_error set).
@@ -210,7 +219,7 @@ index a759c80..713565f 100644
  /// Write all files in `source_dir` directly to `target_dir` on the device outside the sandbox.
  ///
  /// # Safety
-@@ -1862,6 +1941,293 @@ async fn exploit_device_respring(
+@@ -1862,6 +1941,320 @@ async fn exploit_device_respring(
      }
  }
  
@@ -501,6 +510,27 @@ index a759c80..713565f 100644
 +    Ok(data)
 +}
 +
++pub async fn list_dir_afc(
++    pairing_path: String,
++    ios_path: String,
++    logger: &Logger,
++) -> Result<String, String> {
++    let pairing_bytes = std::fs::read(&pairing_path)
++        .map_err(|e| format!("Failed to read pairing file at {pairing_path}: {e}"))?;
++    let mut tunnel = connect_tunnel(&pairing_bytes, logger).await?;
++    let mut afc = tunnel.connect_afc(logger).await?;
++
++    let entries = afc.read_dir(&ios_path).await.map_err(|e| format!("AFC read_dir failed: {e:?}"))?;
++    let mut json_entries = Vec::new();
++    for entry in entries {
++        let name = entry.file_name;
++        let is_dir = entry.is_dir;
++        let safe_name = name.replace("\\", "\\\\").replace("\"", "\\\"");
++        json_entries.push(format!(r#"{{"name":"{}","is_dir":{}}}"#, safe_name, is_dir));
++    }
++    Ok(format!("[{}]", json_entries.join(",")))
++}
++
  /// Write a single file payload into target_dir/leaf using the 2-asset AirTraffic escape.
  /// Matches AirCard's write_file(udid, target_dir, leaf, payload) exactly.
  async fn exploit_write_single_file(
@@ -571,6 +601,47 @@ index 698a452..6d03d07 100644
 +    }
 +    let slice = std::ptr::slice_from_raw_parts_mut(ptr, len);
 +    let _ = Box::from_raw(slice);
++}
++
++/// List directory contents on the device via AFC.
++///
++/// `out_json` receives a JSON array string; release it with `al_string_free` after use.
++#[no_mangle]
++pub unsafe extern "C" fn al_exploit_list_dir(
++    pairing_path: *const c_char,
++    ios_path: *const c_char,
++    log_cb: exploit::ALLogCallback,
++    ctx: *mut c_void,
++    out_json: *mut *mut c_char,
++    out_error: *mut *mut c_char,
++) -> i32 {
++    let pairing_path = opt_str(pairing_path, "airlift_pairing.plist");
++    let ios_path = opt_str(ios_path, "/var/mobile");
++    let ctx_usize = ctx as usize;
++
++    let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
++        crate::ffi_util::run_with_large_stack("al_exploit_list_dir", move || {
++            let logger = exploit::Logger { cb: log_cb, ctx: ctx_usize as *mut c_void };
++            idevice_ffi::run_sync_local(exploit::list_dir_afc(pairing_path, ios_path, &logger))
++        })
++    }));
++
++    match res {
++        Ok(Ok(json_str)) => {
++            if !out_json.is_null() {
++                *out_json = ffi_util::cstr(json_str);
++            }
++            0
++        }
++        Ok(Err(e)) => {
++            if !out_error.is_null() { *out_error = ffi_util::cstr(e); }
++            1
++        }
++        Err(e) => {
++            if !out_error.is_null() { *out_error = ffi_util::cstr(format!("Rust panic: {e:?}")); }
++            1
++        }
++    }
 +}
 +
  /// Write all files from `source_dir` into `target_dir` outside the sandbox via AirTraffic exploit.
