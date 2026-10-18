@@ -7,80 +7,87 @@ struct AirBeepRootView: View {
     @State private var showingAirliftSetup = false
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 24) {
-                    header
-                    if let busyMessage = service.busyMessage {
-                        busyWarning(message: busyMessage)
+        // لێرەدا TabView زیادکرا
+        TabView {
+            // تاب ١: شاشەی سەرەکی (کۆدی پێشوو)
+            NavigationStack {
+                ScrollView {
+                    VStack(spacing: 24) {
+                        header
+                        if let busyMessage = service.busyMessage {
+                            busyWarning(message: busyMessage)
+                        }
+                        if service.needsAirliftSetup {
+                            airliftSetupCard
+                        }
+                        toneActions
+                        details
                     }
-                    if service.needsAirliftSetup {
-                        airliftSetupCard
-                    }
-                    toneActions
-                    details
+                    .padding(20)
                 }
-                .padding(20)
-            }
-            .background(Color(.systemGroupedBackground))
-            .navigationTitle("AirBeep")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showingAbout = true
-                    } label: {
-                        Image(systemName: "info.circle")
-                    }
-                    .accessibilityLabel("About")
-                }
-            }
-        }
-        .onAppear {
-            service.refresh()
-        }
-        .sheet(isPresented: $showingAbout) {
-            AirBeepAboutView()
-        }
-        .sheet(isPresented: $showingAirliftSetup, onDismiss: {
-            service.refresh()
-        }) {
-            AirBeepAirliftSetupView()
-        }
-        .alert(
-            "Operation Failed",
-            isPresented: Binding(
-                get: { service.lastError != nil },
-                set: { presented in
-                    if !presented {
-                        service.clearError()
+                .background(Color(.systemGroupedBackground))
+                .navigationTitle("AirBeep")
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button {
+                            showingAbout = true
+                        } label: {
+                            Image(systemName: "info.circle")
+                        }
+                        .accessibilityLabel("About")
                     }
                 }
-            )
-        ) {
-            Button("OK") {
-                service.clearError()
             }
-        } message: {
-            Text(service.lastError ?? "")
-        }
-        .alert(
-            "Done",
-            isPresented: Binding(
-                get: { service.successMessage != nil },
-                set: { presented in
-                    if !presented {
-                        service.clearSuccess()
+            .tabItem {
+                Label("Home", systemImage: "house.fill")
+            }
+            .onAppear {
+                service.refresh()
+            }
+            .sheet(isPresented: $showingAbout) {
+                AirBeepAboutView()
+            }
+            .sheet(isPresented: $showingAirliftSetup, onDismiss: {
+                service.refresh()
+            }) {
+                AirBeepAirliftSetupView()
+            }
+            .alert(
+                "Operation Failed",
+                isPresented: Binding(
+                    get: { service.lastError != nil },
+                    set: { presented in
+                        if !presented { service.clearError() }
                     }
-                }
-            )
-        ) {
-            Button("OK") {
-                service.clearSuccess()
+                )
+            ) {
+                Button("OK") { service.clearError() }
+            } message: {
+                Text(service.lastError ?? "")
             }
-        } message: {
-            Text(service.successMessage ?? "")
+            .alert(
+                "Done",
+                isPresented: Binding(
+                    get: { service.successMessage != nil },
+                    set: { presented in
+                        if !presented { service.clearSuccess() }
+                    }
+                )
+            ) {
+                Button("OK") { service.clearSuccess() }
+            } message: {
+                Text(service.successMessage ?? "")
+            }
+            
+            // ✅ تاب ٢: شاشەی فایلەکان کە زیادمان کرد
+            FilesView()
+                .tabItem {
+                    Label("Files", systemImage: "folder.fill")
+                }
         }
     }
+
+    // --- بەشەکانی خوارەوە هەمان کۆدی پێشوون و دەستکاری نەکراون ---
 
     private var header: some View {
         VStack(spacing: 12) {
@@ -95,7 +102,7 @@ struct AirBeepRootView: View {
 
             Text("Call Recording Tone")
                 .font(.title2.bold())
-            Text("Back up the original disclosure tones, then silence them. Restore the originals at any time.")
+            Text("Back up the original disclosure tones so you can restore them at any time.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -106,8 +113,6 @@ struct AirBeepRootView: View {
         .frame(maxWidth: .infinity)
     }
 
-    /// System version, then app name plus version, e.g.
-    /// `iOS 27.1  AirBeep v2.5.1 (9)`.
     private var versionLine: String {
         let system = ProcessInfo.processInfo.operatingSystemVersion
         let platform = UIDevice.current.userInterfaceIdiom == .pad ? "iPadOS" : "iOS"
@@ -115,7 +120,6 @@ struct AirBeepRootView: View {
         return "\(systemText)  AirBeep v\(appVersion)"
     }
 
-    /// Marketing version plus build number, e.g. `2.5.1 (9)`.
     private var appVersion: String {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""
@@ -124,24 +128,8 @@ struct AirBeepRootView: View {
         return "\(version) (\(build))"
     }
 
-    /// Two independent actions instead of one switch: silence the tones, and
-    /// either back up the originals (when no backup exists yet) or restore
-    /// them. The current tone state is intentionally not shown — detecting it
-    /// needs a device read that is unreliable on some iOS releases.
     private var toneActions: some View {
         VStack(spacing: 14) {
-            Button {
-                Task { await service.applySilentTone() }
-            } label: {
-                Label("Silence recording tone", systemImage: "speaker.slash.fill")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .tint(.orange)
-            .disabled(service.isBusy)
-
             if service.backupReady {
                 Button {
                     Task { await service.restoreSystemTone() }
@@ -217,12 +205,8 @@ struct AirBeepRootView: View {
 
     private var details: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label("Start and stop sounds are replaced with equal-length silence.", systemImage: "waveform.slash")
+            Label("This build only backs up and restores the original disclosure tones; it does not silence them.", systemImage: "checkmark.shield")
             Label("Changing the system language will force the original tones back.", systemImage: "globe")
-            Label(
-                "The periodic tone during a long recording lives on the read-only system volume and cannot be replaced.",
-                systemImage: "bell.slash"
-            )
         }
         .font(.footnote)
         .foregroundStyle(.secondary)
